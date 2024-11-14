@@ -1,7 +1,9 @@
 import os
 import PIL
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFile
 import cv2
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+Image.MAX_IMAGE_PIXELS = None
 
 """因为opencv读图有时错误地将8位单通道的标签图片也切割并保存为24位三通道的了，因此改用PIL将数据集中的大图切割成小图。"""
 
