@@ -1,0 +1,75 @@
+import os
+from osgeo import gdal, ogr, osr
+
+def cut_image_into_tiles(input_path, output_dir, tile_size_x, tile_size_y):
+    # 打开输入的遥感图像
+    ds = gdal.Open(input_path)
+    if ds is None:
+        print(f"无法打开文件 {input_path}")
+        return
+
+    # 获取图像的宽度和高度
+    band = ds.GetRasterBand(1)
+    width = ds.RasterXSize
+    height = ds.RasterYSize
+
+    # 创建输出目录
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # 计算需要切割的行数和列数
+    num_cols = (width + tile_size_x - 1) // tile_size_x
+    num_rows = (height + tile_size_y - 1) // tile_size_y
+
+    # 切割图像
+    for row in range(num_rows):
+        for col in range(num_cols):
+            # 计算每个小图的边界
+            x_min = col * tile_size_x
+            y_min = row * tile_size_y
+            x_max = min((col + 1) * tile_size_x, width)
+            y_max = min((row + 1) * tile_size_y, height)
+
+            # 读取每个小图的数据
+            tile_data = ds.ReadAsArray(x_min, y_min, x_max - x_min, y_max - y_min)
+
+            # 创建新的GeoTIFF文件
+            tile_path = os.path.join(output_dir, f'tile_{row}_{col}.tif')
+            driver = gdal.GetDriverByName('GTiff')
+            tile_ds = driver.Create(tile_path, x_max - x_min, y_max - y_min, ds.RasterCount, band.DataType)
+
+            # 设置地理变换参数
+            geotransform = ds.GetGeoTransform()
+            tile_geotransform = (
+                geotransform[0] + x_min * geotransform[1] + y_min * geotransform[2],
+                geotransform[1],
+                geotransform[2],
+                geotransform[3] + x_min * geotransform[4] + y_min * geotransform[5],
+                geotransform[4],
+                geotransform[5]
+            )
+            tile_ds.SetGeoTransform(tile_geotransform)
+
+            # 设置投影信息
+            tile_ds.SetProjection(ds.GetProjection())
+
+            # 写入数据
+            for i in range(ds.RasterCount):
+                tile_ds.GetRasterBand(i + 1).WriteArray(tile_data[i])
+
+            # 关闭文件
+            tile_ds.FlushCache()
+            tile_ds = None
+
+    # 关闭输入文件
+    ds = None
+
+    print(f"图像切割完成，共生成 {num_rows * num_cols} 个小图")
+
+# 示例用法
+input_image_path = 'path/to/your/large_image.tif'  # 替换为你的大图路径
+output_directory = 'path/to/output/tiles'  # 替换为你的输出目录
+tile_size_x = 512  # 小图的宽度
+tile_size_y = 512  # 小图的高度
+
+cut_image_into_tiles(input_image_path, output_directory, tile_size_x, tile_size_y)
